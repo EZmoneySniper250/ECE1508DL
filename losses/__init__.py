@@ -204,11 +204,11 @@ class DistillationLoss(nn.Module):
 
         # 2. Feature-level KD: MSE(projector(student_feat), teacher_feat)
         l_feat0 = self.feat_kd(
-            student_data["student_coarse_feat0_proj"],
+            student_data["coarse_feat0_proj"],
             teacher_data["teacher_coarse_feat0"],
         )
         l_feat1 = self.feat_kd(
-            student_data["student_coarse_feat1_proj"],
+            student_data["coarse_feat1_proj"],
             teacher_data["teacher_coarse_feat1"],
         )
         l_feat = (l_feat0 + l_feat1) / 2

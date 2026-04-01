@@ -2,7 +2,7 @@
 Student-CNN: Pure Convolutional Student Network for LoFTR Distillation.
 
 Key architecture:
-    - Lightweight CNN backbone (shared with Student-Hybrid)
+    - MobileNetV3-Small backbone (shared with Student-Hybrid)
     - Dilated convolution feature interaction (NO attention)
     - Dual-softmax coarse matching
     - Local window fine refinement
@@ -16,7 +16,7 @@ import torch
 import torch.nn as nn
 
 from .config import StudentCNNConfig
-from .backbone import LightweightBackbone
+from .backbone import MobileNetV3Backbone
 from .dilated_interaction import DilatedInteractionModule
 from .matching import CoarseMatching, FineRefinement
 
@@ -41,7 +41,7 @@ class StudentCNN(nn.Module):
         self.config = config
 
         # ─── Shared backbone ────────────────────────────────────────────────
-        self.backbone = LightweightBackbone(config)
+        self.backbone = MobileNetV3Backbone(coarse_channels=config.coarse_dim)
 
         # ─── Feature interaction: dilated convolutions (replaces attention) ─
         self.interaction = DilatedInteractionModule(config)
@@ -80,10 +80,10 @@ class StudentCNN(nn.Module):
               Training mode:
                 - 'conf_matrix':  (B, N0, N1) coarse confidence matrix
                 - 'sim_matrix':   (B, N0, N1) raw similarity scores
-                - 'student_coarse_feat0':      (B, 128, H/8, W/8)
-                - 'student_coarse_feat1':      (B, 128, H/8, W/8)
-                - 'student_coarse_feat0_proj': (B, 256, H/8, W/8)
-                - 'student_coarse_feat1_proj': (B, 256, H/8, W/8)
+                - 'coarse_feat0':      (B, 128, H/8, W/8)
+                - 'coarse_feat1':      (B, 128, H/8, W/8)
+                - 'coarse_feat0_proj': (B, 256, H/8, W/8)
+                - 'coarse_feat1_proj': (B, 256, H/8, W/8)
 
               Inference mode (additionally):
                 - 'keypoints0':  (M, 2) matched keypoint coords in image 0
@@ -94,17 +94,17 @@ class StudentCNN(nn.Module):
         img1 = data["image1"]
 
         # ── 1. Feature extraction ───────────────────────────────────────────
-        coarse0, fine0 = self.backbone(img0)  # (B,128,H/8,W/8), (B,64,H/2,W/2)
+        coarse0, fine0 = self.backbone(img0)  # (B,128,H/8,W/8), (B,32,H/2,W/2)
         coarse1, fine1 = self.backbone(img1)
 
         # Store raw coarse features for distillation
-        data["student_coarse_feat0"] = coarse0
-        data["student_coarse_feat1"] = coarse1
+        data["coarse_feat0"] = coarse0
+        data["coarse_feat1"] = coarse1
 
         # Project coarse features for feature-level distillation loss
         if self.training:
-            data["student_coarse_feat0_proj"] = self.feat_projector(coarse0)
-            data["student_coarse_feat1_proj"] = self.feat_projector(coarse1)
+            data["coarse_feat0_proj"] = self.feat_projector(coarse0)
+            data["coarse_feat1_proj"] = self.feat_projector(coarse1)
 
         # ── 2. Feature interaction via dilated convolutions ─────────────────
         enhanced0, enhanced1 = self.interaction(coarse0, coarse1)

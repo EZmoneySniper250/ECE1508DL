@@ -1,3 +1,4 @@
-hpatches-sequences-release/__pycache__/
 hpatches-sequences-release/
 __pycache__/
+diag_backbone.py
+verify_students.py

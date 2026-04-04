@@ -1,108 +1,70 @@
 """
-Lightweight CNN backbone for Student networks.
+MobileNetV3-Small backbone for student networks.
 
 Produces two feature levels:
-  - fine features:   1/2 resolution, 64-dim   (from stage 1)
-  - coarse features: 1/8 resolution, 128-dim  (from stage 3)
+  - fine features:   1/2 resolution, 32-dim   (from MobileNetV3 stage 0)
+  - coarse features: 1/8 resolution, 128-dim  (from MobileNetV3 stages 1–5)
 
-Significantly smaller than LoFTR's ResNet-18 FPN backbone (~1M vs ~11M params).
+Significantly smaller than LoFTR's ResNet-18 FPN backbone.
 """
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-
-from .config import StudentCNNConfig
+import torchvision.models as models
 
 
-class BasicResBlock(nn.Module):
-    """Simple residual block with two 3×3 convolutions."""
-
-    def __init__(self, in_channels: int, out_channels: int, stride: int = 1):
-        super().__init__()
-        self.conv1 = nn.Conv2d(
-            in_channels, out_channels, 3, stride=stride, padding=1, bias=False
-        )
-        self.bn1 = nn.BatchNorm2d(out_channels)
-        self.conv2 = nn.Conv2d(
-            out_channels, out_channels, 3, padding=1, bias=False
-        )
-        self.bn2 = nn.BatchNorm2d(out_channels)
-
-        # Shortcut connection
-        self.shortcut = nn.Sequential()
-        if stride != 1 or in_channels != out_channels:
-            self.shortcut = nn.Sequential(
-                nn.Conv2d(in_channels, out_channels, 1, stride=stride, bias=False),
-                nn.BatchNorm2d(out_channels),
-            )
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        out = F.relu(self.bn1(self.conv1(x)))
-        out = self.bn2(self.conv2(out))
-        out = out + self.shortcut(x)
-        return F.relu(out)
-
-
-class LightweightBackbone(nn.Module):
+class MobileNetV3Backbone(nn.Module):
     """
-    Lightweight CNN backbone for student networks.
-
-    Architecture:
-        Stem:   1 → 32 channels, stride=1  (full resolution)
-        Stage1: 32 → 64, stride=2          (1/2 resolution)  → fine features
-        Stage2: 64 → 64, stride=2          (1/4 resolution)
-        Stage3: 64 → 128, stride=2         (1/8 resolution)  → coarse features
-
-    For 480×640 input:
-        fine features:   (B, 64,  240, 320)
-        coarse features: (B, 128, 60,  80)
+    Truncated MobileNetV3-Small as shared backbone.
+    Extracts coarse (1/8) and fine (1/2) features from grayscale input.
     """
 
-    def __init__(self, config: StudentCNNConfig = None):
+    def __init__(self, coarse_channels=128):
         super().__init__()
-        if config is None:
-            config = StudentCNNConfig()
+        mobilenet = models.mobilenet_v3_small(weights="IMAGENET1K_V1")
+        features = list(mobilenet.features.children())
 
-        c = config.backbone_channels  # [32, 64, 128]
-
-        # Stem: grayscale → 32 channels, no spatial reduction
-        self.stem = nn.Sequential(
-            nn.Conv2d(1, c[0], 3, stride=1, padding=1, bias=False),
-            nn.BatchNorm2d(c[0]),
-            nn.ReLU(inplace=True),
+        # Modify first layer: 3-channel RGB → 1-channel grayscale
+        orig_conv = features[0][0]
+        features[0][0] = nn.Conv2d(
+            1, 16, kernel_size=orig_conv.kernel_size,
+            stride=orig_conv.stride, padding=orig_conv.padding, bias=False
         )
+        # Initialize grayscale channel with mean of pretrained RGB weights
+        with torch.no_grad():
+            features[0][0].weight.copy_(orig_conv.weight.mean(dim=1, keepdim=True))
 
-        # Stage 1: 32 → 64, stride=2 → 1/2 resolution (fine features)
-        self.stage1 = nn.Sequential(
-            BasicResBlock(c[0], c[1], stride=2),
-            BasicResBlock(c[1], c[1]),
-        )
+        # MobileNetV3-Small features structure (verified empirically on 480×480):
+        # [0]  ConvBNActivation  stride=2  → 1/2   (16 ch)
+        # [1]  InvertedResidual  stride=2  → 1/4   (16 ch)
+        # [2]  InvertedResidual  stride=2  → 1/8   (24 ch)  ← coarse target
+        # [3]  InvertedResidual  stride=1  → 1/8   (24 ch)
+        # [4]  InvertedResidual  stride=2  → 1/16  (40 ch)  ← too deep
+        # ...
 
-        # Stage 2: 64 → 64, stride=2 → 1/4 resolution
-        self.stage2 = nn.Sequential(
-            BasicResBlock(c[1], c[1], stride=2),
-            BasicResBlock(c[1], c[1]),
-        )
+        # Fine features: up to 1/2 resolution
+        self.fine_layers = nn.Sequential(*features[:1])    # → 1/2, 16 ch
 
-        # Stage 3: 64 → 128, stride=2 → 1/8 resolution (coarse features)
-        self.stage3 = nn.Sequential(
-            BasicResBlock(c[1], c[2], stride=2),
-            BasicResBlock(c[2], c[2]),
-        )
+        # Coarse features: up to 1/8 resolution
+        self.coarse_layers = nn.Sequential(*features[1:4])  # → 1/8, 24 ch
+
+        # Project to unified channel counts
+        self.fine_proj = nn.Conv2d(16, 32, 1)
+        self.coarse_proj = nn.Conv2d(24, coarse_channels, 1)
 
     def forward(self, x: torch.Tensor):
         """
         Args:
-            x: (B, 1, H, W) grayscale image tensor, H and W must be multiples of 8.
+            x: (B, 1, H, W) grayscale image, H and W must be divisible by 8.
 
         Returns:
-            coarse_feat: (B, 128, H/8, W/8)
-            fine_feat:   (B, 64,  H/2, W/2)
+            coarse_feat: (B, coarse_channels, H/8, W/8)
+            fine_feat:   (B, 32, H/2, W/2)
         """
-        x = self.stem(x)           # (B, 32,  H,   W)
-        fine_feat = self.stage1(x)  # (B, 64,  H/2, W/2)
-        x = self.stage2(fine_feat)  # (B, 64,  H/4, W/4)
-        coarse_feat = self.stage3(x)  # (B, 128, H/8, W/8)
+        feat_fine = self.fine_layers(x)                   # (B, 16, H/2, W/2)
+        feat_coarse = self.coarse_layers(feat_fine)        # (B, 40, H/8, W/8)
 
-        return coarse_feat, fine_feat
+        feat_fine = self.fine_proj(feat_fine)              # (B, 32, H/2, W/2)
+        feat_coarse = self.coarse_proj(feat_coarse)        # (B, coarse_channels, H/8, W/8)
+
+        return feat_coarse, feat_fine

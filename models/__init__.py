@@ -1,2 +1,3 @@
 from .student_cnn import StudentCNN
-from .config import StudentCNNConfig
+from .studentattention import StudentHybrid
+from .config import StudentCNNConfig, StudentHybridConfig

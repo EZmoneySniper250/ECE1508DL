@@ -68,7 +68,8 @@ class ShallowCrossAttention(nn.Module):
             f0_out: (B, C, H, W) transformed features
             f1_out: (B, C, H, W) transformed features
         """
-        B, C, H, W = f0.shape
+        B, C, H0, W0 = f0.shape
+        _, _, H1, W1 = f1.shape
 
         # Flatten: (B, C, H, W) → (B, H*W, C)
         f0 = f0.flatten(2).permute(0, 2, 1)  # (B, H*W, C)
@@ -94,8 +95,8 @@ class ShallowCrossAttention(nn.Module):
             f1 = self.ffn_norms[i](f1 + self.ffn_layers[i](f1))
 
         # Reshape back: (B, H*W, C) → (B, C, H, W)
-        f0 = f0.permute(0, 2, 1).reshape(B, C, H, W)
-        f1 = f1.permute(0, 2, 1).reshape(B, C, H, W)
+        f0 = f0.permute(0, 2, 1).reshape(B, C, H0, W0)
+        f1 = f1.permute(0, 2, 1).reshape(B, C, H1, W1)
 
         return f0, f1
 

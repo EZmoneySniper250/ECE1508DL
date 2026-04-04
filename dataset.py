@@ -35,6 +35,12 @@ class SyntheticHomographyDataset(torch.utils.data.Dataset):
         self.images = glob.glob(os.path.join(image_dir, "*/1.ppm"))
         self.num_pairs = num_pairs
         self.patch_size = patch_size
+        if len(self.images) == 0:
+            raise FileNotFoundError(
+                f"No HPatches images found at '{os.path.abspath(image_dir)}'.\n"
+                f"Expected files matching: {os.path.join(image_dir, '*/1.ppm')}\n"
+                f"Check that HPATCHES_PATH points to the hpatches-sequences-release directory."
+            )
 
     def __len__(self):
         return self.num_pairs

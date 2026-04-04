@@ -97,14 +97,11 @@ class StudentCNN(nn.Module):
         coarse0, fine0 = self.backbone(img0)  # (B,128,H/8,W/8), (B,32,H/2,W/2)
         coarse1, fine1 = self.backbone(img1)
 
-        # Store raw coarse features for distillation
+        # Store raw coarse features for distillation.
+        # coarse_feat0_proj is set externally by the training loop via
+        # project_student_feat_for_kd() using the nn.Linear feature_projector.
         data["coarse_feat0"] = coarse0
         data["coarse_feat1"] = coarse1
-
-        # Project coarse features for feature-level distillation loss
-        if self.training:
-            data["coarse_feat0_proj"] = self.feat_projector(coarse0)
-            data["coarse_feat1_proj"] = self.feat_projector(coarse1)
 
         # ── 2. Feature interaction via dilated convolutions ─────────────────
         enhanced0, enhanced1 = self.interaction(coarse0, coarse1)

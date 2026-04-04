@@ -314,12 +314,13 @@ class StudentHybrid(nn.Module):
         coarse0, fine0 = self.backbone(img0)
         coarse1, fine1 = self.backbone(img1)
 
-        # 2. Store pre-attention features and project for distillation
+        # 2. Store pre-attention features (raw, for the training-loop projector)
+        # Note: coarse_feat0_proj is set externally by the training loop via
+        # project_student_feat_for_kd(), which uses the nn.Linear feature_projector.
+        # The Conv2d feat_projector inside this model is kept for potential future use
+        # but is NOT called here to avoid a dead computation branch.
         data['coarse_feat0'] = coarse0
         data['coarse_feat1'] = coarse1
-        if self.training:
-            data['coarse_feat0_proj'] = self.feat_projector(coarse0)
-            data['coarse_feat1_proj'] = self.feat_projector(coarse1)
 
         # 3. Feature interaction: shallow cross-attention
         coarse0, coarse1 = self.attention(coarse0, coarse1)

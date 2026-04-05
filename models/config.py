@@ -23,7 +23,7 @@ class StudentHybridConfig:
 
     # ── Coarse matching ──────────────────────────────────────────────────────
     temperature = 0.1          # dual-softmax temperature
-    match_threshold = 0.2      # confidence threshold for match extraction
+    match_threshold = 0.2     # confidence threshold for match extraction
 
     # ── Fine refinement ──────────────────────────────────────────────────────
     fine_window_size = 5       # local window size for sub-pixel refinement

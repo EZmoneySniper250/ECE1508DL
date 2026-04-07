@@ -1,0 +1,239 @@
+\documentclass{article}
+% if you need to pass options to natbib, use, e.g.:
+%     \PassOptionsToPackage{numbers, compress}{natbib}
+% before loading neurips_2023
+\usepackage[final]{neurips}
+% to avoid loading the natbib package, add option nonatbib:
+%    \usepackage[nonatbib]{neurips}
+
+
+\usepackage[utf8]{inputenc} % allow utf-8 input
+\usepackage[T1]{fontenc}    % use 8-bit T1 fonts
+\usepackage{hyperref}       % hyperlinks
+\usepackage{url}            % simple URL typesetting
+\usepackage{booktabs}       % professional-quality tables
+\usepackage{amsfonts}       % blackboard math symbols
+\usepackage{nicefrac}       % compact symbols for 1/2, etc.
+\usepackage{microtype}      % microtypography
+\usepackage{xcolor}         % colors
+\usepackage{float}
+
+
+\title{How Much Attention Does a Student Need? Distilling LoFTR into Compact Matching Networks}
+
+
+% The \author macro works with any number of authors. There are two commands
+% used to separate the names and addresses of multiple authors: \And and \AND.
+%
+% Using \And between authors leaves it to LaTeX to determine where to break the
+% lines. Using \AND forces a line break at that point. So, if LaTeX puts 3 of 4
+% authors names on the first line, and the last on the second line, try using
+% \AND instead of \And before the third author name.
+
+
+\author{%
+  Jerry Chen\\
+  The Edward S. Rogers Sr. Department of Electrical & Computer Engineering\\
+  University of Toronto\\
+  \texttt{jianuojerry.chen@mail.utoronto.ca} \\
+  % more authors
+  \And
+  Spiro Li\\
+  The Edward S. Rogers Sr. Department of Electrical & Computer Engineering\\
+  University of Toronto\\
+  \texttt{supeng.li@mail.utoronto.ca} \\
+  \And
+  Weijie Zhu\\
+  The Edward S. Rogers Sr. Department of Electrical & Computer Engineering\\
+  University of Toronto\\
+  \texttt{weijie.zhu@mail.utoronto.ca} \\
+  % \And
+  % Coauthor \\
+  % Affiliation \\
+  % Address \\
+  % \texttt{email} \\
+  % \And
+  % Coauthor \\
+  % Affiliation \\
+  % Address \\
+  % \texttt{email} \\
+}
+
+\begin{document}
+
+
+\maketitle
+
+
+\section{Problem Description}
+Homography estimation depends on finding accurate point correspondences between two images. Traditional methods typically follow a detect--describe--match pipeline, where algorithms such as SIFT [1] and ORB [2] first identify salient keypoints, compute local descriptors, and then match descriptors across images. This pipeline performs well when images contain rich texture, but it often struggles in scenes with low-texture regions, repetitive patterns, or significant viewpoint changes, since stable keypoints may be difficult to detect reliably.
+
+LoFTR [3] addresses this limitation with a detector-free matching framework. Instead of relying on sparse keypoint detection, it extracts image features using a CNN backbone and employs Transformer-based self- and cross-attention to incorporate global context between the two images. Matches are first established at a coarse level and then refined locally, which makes the model effective in challenging regions where local appearance alone is insufficient. This design achieves strong performance in homography estimation on the HPatches [4] benchmark.
+
+However, the same global attention mechanism that makes LoFTR effective also makes it computationally expensive. Attention has quadratic complexity with respect to the number of feature tokens, and LoFTR applies it densely across the entire coarse feature map. LoFTR's dense attention across the full feature map incurs substantial computational overhead, limiting its applicability in real-time scenarios. Efficient LoFTR [5] partially addresses this by introducing aggregated attention with adaptive token selection, achieving approximately 2.5 times faster inference. Nevertheless, it still relies on attention-based feature interaction and does not explore how far a purely convolutional architecture can go. This raises a natural question: can a much smaller network, trained through knowledge distillation from LoFTR, preserve sufficient matching quality to be practically useful, and if so, how much of that quality depends on retaining an attention mechanism as opposed to relying on convolutions alone? This question motivates the present project.
+
+
+\section{The Considered Deep Learning Solution}
+To address the computational limitations of LoFTR, we will apply knowledge distillation [6] to transfer its matching capability into compact student networks. Rather than training the student solely on ground-truth labels, knowledge distillation encourages the student to mimic the teacher's output distribution, which contains richer supervisory signals such as the relative confidence across all candidate correspondences. The team will adopt a multi-level distillation strategy consisting of four loss components:
+
+\begin{table}[H]
+\centering
+\caption{Multi-level distillation objectives used in this project}
+\label{tab:distillation-components}
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{|p{0.23\textwidth}|p{0.37\textwidth}|p{0.28\textwidth}|}
+\hline
+\textbf{Loss Component} & \textbf{Distillation Target} & \textbf{Method} \\
+\hline
+Coarse matching distillation & Teacher's dual-softmax confidence matrix & KL divergence \\
+\hline
+Feature distillation & Intermediate feature representations & MSE with a learned 1$\times$1 conv projector [7] \\
+\hline
+Fine-level distillation & Sub-pixel refined coordinates & L1 distance \\
+\hline
+Ground-truth supervision & Correspondences from depth maps and camera poses & LoFTR's original supervised loss [3] \\
+\hline
+\end{tabular}
+\end{table}
+
+The overall pipeline therefore consists of three stages: (1) generating dense correspondences using the pretrained LoFTR teacher, (2) training compact student networks through multi-level knowledge distillation, and (3) evaluating the resulting models on homography estimation accuracy and efficiency metrics.
+
+The ground-truth supervision is included to prevent the student from blindly replicating the teacher's errors. Since the teacher and student models have fundamentally different architectures, a learnable projector is introduced to bridge the dimensional and structural gap between Transformer-based and CNN-based feature spaces during training. This projector is discarded at inference time and adds no cost to deployment.
+We design two student variants that share the same lightweight CNN backbone and matching heads, differing only in the feature interaction module. The first, \textbf{Student-Hybrid}, retains one to two shallow cross-attention layers to allow limited global feature communication between the two images. The second, \textbf{Student-CNN}, removes all attention and instead relies on stacked dilated convolutions [8] and cross-correlation to approximate a large receptive field through purely local operations. By isolating the feature interaction module as the only variable, we can directly measure the contribution of attention to the distilled model's matching performance.
+
+The evaluation follows LoFTR's established protocol on the HPatches dataset [4]. The primary metric is the area under the cumulative corner error curve (AUC) at thresholds of \textbf{3, 5, and 10 pixels}, computed after estimating the homography using Random Sample Consensus (RANSAC), which robustly fits the homography while rejecting incorrect correspondences . 
+
+Along with the AUC, these metrics will also be reported, to evaluate both \textbf{matching quality} and \textbf{computational efficiency}
+\begin{itemize}
+\item \textbf{Matching accuracy}: correctness of predicted correspondences.
+\item \textbf{Number of valid matches}: number of reliable correspondences produced by the model.
+\item \textbf{Model size}: storage footprint of the network.
+\item \textbf{FLOPs}: computational complexity measured in floating-point operations.
+\item \textbf{GPU inference latency}: runtime required to process one image pair on a GPU.
+\end{itemize}
+Results are analyzed separately on the illumination and viewpoint subsets of HPatches to identify where each student variant fails relative to the teacher. If Student-Hybrid significantly outperforms Student-CNN on low-texture and large-viewpoint-change scenes, it would indicate that some form of attention remains essential for dense matching even after knowledge transfer.
+
+	
+\section{Data Acquisition}
+Our data pipeline relies on two primary datasets: \textbf{MegaDepth} for training the student networks and \textbf{HPatches} for evaluating the matching and homography estimation performance.
+
+\paragraph{Training Data}
+To maintain consistency with the original LoFTR teacher model, the student networks will be trained on the training split of the \textbf{MegaDepth} dataset. MegaDepth contains large-scale internet photos of diverse outdoor scenes with reconstructed camera poses and depth maps. These camera poses and depth maps are essential for our pipeline, as they will be used to generate reliable ground-truth correspondences to compute the supervised loss ($\mathcal{L}_{GT}$) alongside the multi-level knowledge distillation losses.
+
+\textit{Contingency Plan:} Given the massive scale of the MegaDepth dataset, there is a high risk that downloading or training might exceed our computational budget and time constraints. If this occurs, we plan to use the HPatches dataset combined with random homography augmentations to conduct small-scale training as a fallback alternative.
+
+\paragraph{Evaluation Benchmark}
+The distilled student models and the teacher baseline will be systematically benchmarked on the \textbf{HPatches} dataset. HPatches is a standard, widely adopted benchmark for homography estimation. Following the convention of LoFTR [3], 8 high-resolution sequences are excluded, resulting in 108 sequences for evaluation, which are naturally divided into two subsets to evaluate model robustness against different challenges:
+\begin{itemize}
+    \item \textbf{Illumination Subset:} 52 sequences featuring images taken under significantly varying lighting conditions but from the same viewpoint.
+    \item \textbf{Viewpoint Subset:} 56 sequences capturing scenes with large, challenging variations in perspective and viewing angles.
+\end{itemize}
+Within each sequence, one reference image is paired with five target images, yielding a total of 540 image pairs. Ground-truth homography matrices are provided for all image pairs to compute the reprojection and corner errors.
+
+\paragraph{Data Preprocessing}
+To ensure a strictly fair comparison and to adhere to the established evaluation protocol of the original LoFTR paper, all input images from the HPatches dataset will be preprocessed prior to inference. Specifically, the images will be resized such that their shorter dimension is equal to 480 pixels while preserving the aspect ratio. The top 1000 predicted matches will be selected and used with OpenCV RANSAC (confidence = 0.99999) to estimate the homography matrices.
+
+
+
+\section{The Milestones Accomplished}
+By the submission time of this progress briefing, the project scope, model design, evaluation protocol, and implementation roadmap have been clearly defined. We have fixed pretrained LoFTR-DS as the teacher baseline, selected HPatches as the main benchmark, and determined two student architectures for comparison: a CNN plus shallow-attention hybrid model and a pure CNN student. We have also specified a multi-level distillation framework consisting of coarse-level distillation, feature-level distillation, fine-level coordinate distillation, and ground-truth supervision. The evaluation protocol has been aligned with the homography estimation setting on HPatches, using OpenCV RANSAC and AUC@3, AUC@5, and AUC@10 as the primary metrics. Additional comparisons will include matching quality, runtime, model size, FLOPs, and GPU memory usage.
+
+\begin{table}[H]
+\centering
+\caption{Planned project milestones and deliverables}
+\label{tab:milestones}
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{|p{0.12\textwidth}|p{0.50\textwidth}|p{0.28\textwidth}|}
+\hline
+\textbf{Week} & \textbf{Main Tasks} & \textbf{Minimum Deliverables} \\
+\hline
+Week 1 &
+Environment setup; teacher baseline reproduction on HPatches; teacher profiling; implementation of the hybrid student and pure CNN student; setup of the distillation training pipeline. &
+Confirmed teacher baseline numbers; runnable training pipeline. \\
+\hline
+Week 2 &
+Train the hybrid student with full KD and GT supervision; train the pure CNN student; train at least one GT-only baseline; run full HPatches evaluation on all trained models. &
+At least three trained models with initial AUC results. \\
+\hline
+Week 3 &
+Run ablation studies; analyze illumination and viewpoint subsets; generate qualitative visualizations; prepare the final report draft. &
+Main comparison and at least two ablations completed (attention ablation and distillation ablation); illumination/viewpoint analysis completed; report draft completed. \\
+\hline
+\end{tabular}
+\end{table}
+
+The milestones above show that the project has already moved beyond topic selection. The problem setting, teacher--student framework, loss design, evaluation protocol, and weekly execution plan have all been clearly established, allowing the project to proceed in a structured and measurable way.
+
+	
+	
+
+\newpage
+\section*{References}
+\medskip
+{
+\small
+
+
+[1] D. G. Lowe, "Distinctive image features from scale-invariant keypoints," Int. J. Comput. Vis., vol. 60, no. 2, pp. 91–110, 2004.
+
+
+
+[2] E. Rublee, V. Rabaud, K. Konolige, and G. Bradski, "ORB: An efficient alternative to SIFT or SURF," in Proc. IEEE Int. Conf. Comput. Vis. (ICCV), 2011, pp. 2564–2571.
+
+
+
+[3] J. Sun, Z. Shen, Y. Wang, H. Bao, and X. Zhou, "LoFTR: Detector-free local feature matching with Transformers," in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR), 2021, pp. 8922–8931.
+
+[4] V. Balntas, K. Lenc, A. Vedaldi, and K. Mikolajczyk, "HPatches: A benchmark and evaluation of handcrafted and learned local descriptors," in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR), 2017, pp. 5173–5182.
+
+[5] Y. Wang, X. He, S. Peng, D. Tan, and X. Zhou, "Efficient LoFTR: Semi-dense local feature matching with sparse-like speed," in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR), 2024.
+
+[6] G. Hinton, O. Vinyals, and J. Dean, "Distilling the knowledge in a neural network," arXiv preprint arXiv:1503.02531, 2015.
+
+[7] Z. Liu et al., "Cross-architecture knowledge distillation," in Proc. Asian Conf. Comput. Vis. (ACCV), 2022.
+
+[8] F. Yu and V. Koltun, "Multi-scale context aggregation by dilated convolutions," in Proc. Int. Conf. Learn. Represent. (ICLR), 2016.
+
+}
+
+\section*{Appendix}
+
+
+
+
+\section*{Use of AI}
+During the project briefing's preparation stage, the team used AI to review and understand relevant research resources. Specifically, AI was used to help interpret related papers, including Efficient LoFTR, Cross-Architecture Knowledge Distillation, and Multi-Scale Context Aggregation by Dilated Convolution. These resources supported the design of the two student architectures, the identification of appropriate loss components, and the confirmation of distillation targets. Additionally, after drafting the initial version of the project briefing, the team used AI to refine grammar and enhance the writing's professionalism and clarity.
+
+\section*{Contest for Information Sharing}
+As part of this course, we may share selected project materials (e.g., reports, presentation slides, and presentation recordings) on the course webpage as learning resources for future students. Additionally, we may use anonymized project information for internal statistical analysis of course outcomes. Please indicate your preferences below. \textit{Your choices will not affect your grade in any way.}
+
+\subsection*{Consent for Sharing Project Materials}
+\textit{Please keep the item you wish and remove the other one.}
+
+\begin{itemize}
+	\item All group members consent to allow the project materials (report, slides, and presentation recording) to be shared on the course page for future students.
+	\item The group members do \textbf{not} consent to allow the project materials (report, slides, and presentation recording) to be shared on the course page for future students.
+\end{itemize}
+
+
+
+\subsection*{Consent for Use of Project Information in Statistical Analysis}
+\textit{Please keep the item you wish and remove the other one.}
+\begin{itemize}
+	\item All group members consent to allow anonymized information about the project (e.g., topic, methods, outcomes, grades) to be used by the instructor for statistical analysis and course improvement.
+	\item The group members do \textbf{not} consent to allow anonymized information about the project (e.g., topic, methods, outcomes, grades) to be used by the instructor for statistical analysis and course improvement.
+\end{itemize}
+
+\subsection*{Optional Comments}
+\textit{Please list any specific conditions or comments here.}
+
+\subsection*{Group Identification}
+
+\begin{itemize}
+	\item Group number: 27
+	\item Names of group members: Jerry Chen, Spiro Li, Weijie Zhu
+	\item Signature of of group members: Jerry Chen, Spiro Li, Weijie Zhu
+	\item Date: 2026/3/11
+\end{itemize}
+
+\end{document}

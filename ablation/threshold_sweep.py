@@ -101,7 +101,7 @@ def load_model(model_type, ckpt_path):
     return model
 
 
-def evaluate_with_threshold(model, model_type, threshold, dataset, num_samples=580):
+def evaluate_with_threshold(model, model_type, threshold, dataset, num_samples=100):
     """Evaluate a model at a specific confidence threshold."""
     # Patch the threshold
     if model_type == "hybrid":
@@ -169,8 +169,7 @@ def main():
 
         for thr in THRESHOLDS:
             aucs, avg_matches = evaluate_with_threshold(
-                model, model_type, thr, dataset, num_samples=580
-            )
+                model, model_type, thr, dataset, num_samples=100)
             print(f"  threshold={thr:.3f}  AUC@3={aucs['AUC@3']:.2f}  "
                   f"AUC@5={aucs['AUC@5']:.2f}  AUC@10={aucs['AUC@10']:.2f}  "
                   f"matches={avg_matches:.1f}")

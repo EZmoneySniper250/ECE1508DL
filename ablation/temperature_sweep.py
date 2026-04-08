@@ -50,7 +50,7 @@ THRESHOLDS = {
 }
 
 
-def evaluate_with_temperature(model, model_type, temperature, threshold, dataset, num_samples=580):
+def evaluate_with_temperature(model, model_type, temperature, threshold, dataset, num_samples=100):
     """Evaluate model at a specific temperature and threshold."""
     # Patch temperature and threshold
     if model_type == "hybrid":

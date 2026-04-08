@@ -88,7 +88,7 @@ def main():
 
     torch.manual_seed(42)
     np.random.seed(42)
-    dataset = SyntheticHomographyDataset(HPATCHES_PATH, num_pairs=580, patch_size=480)
+    dataset = SyntheticHomographyDataset(HPATCHES_PATH, num_pairs=100, patch_size=480)
 
     csv_path = out_dir / "temperature_sweep.csv"
     with open(csv_path, "w", newline="") as f:
@@ -107,7 +107,7 @@ def main():
 
         for temp in TEMPERATURES:
             aucs = evaluate_with_temperature(
-                model, model_type, temp, thr, dataset, num_samples=580
+                model, model_type, temp, thr, dataset, num_samples=100
             )
             print(f"  temp={temp:.3f}  AUC@3={aucs['AUC@3']:.2f}  "
                   f"AUC@5={aucs['AUC@5']:.2f}  AUC@10={aucs['AUC@10']:.2f}")

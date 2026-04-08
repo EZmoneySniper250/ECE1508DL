@@ -88,7 +88,7 @@ def main():
 
     torch.manual_seed(42)
     np.random.seed(42)
-    dataset = SyntheticHomographyDataset(HPATCHES_PATH, num_pairs=580, patch_size=480)
+    dataset = SyntheticHomographyDataset(HPATCHES_PATH, num_pairs=100, patch_size=480)
 
     csv_path = out_dir / "temperature_sweep.csv"
     with open(csv_path, "w", newline="") as f:

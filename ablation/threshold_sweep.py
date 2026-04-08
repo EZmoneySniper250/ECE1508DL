@@ -149,7 +149,7 @@ def main():
     # Load dataset (fixed seed for reproducibility)
     torch.manual_seed(42)
     np.random.seed(42)
-    dataset = SyntheticHomographyDataset(HPATCHES_PATH, num_pairs=580, patch_size=480)
+    dataset = SyntheticHomographyDataset(HPATCHES_PATH, num_pairs=100, patch_size=480)
 
     # CSV header
     csv_path = out_dir / "threshold_sweep.csv"

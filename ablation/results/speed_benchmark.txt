@@ -1,0 +1,9 @@
+Speed Benchmark Results
+Device: cuda (NVIDIA H100 80GB HBM3)
+Image: 480x480, Runs: 100
+
+Model                     Params     Latency(ms)     FPS        Mem(MB)   
+----------------------------------------------------------------------
+Student-Hybrid            0.45M     11.63            86.0       561
+Student-CNN               0.66M     6.56            152.5       561
+LoFTR Teacher             11.56M     19.06            52.5       893

@@ -22,22 +22,25 @@ Download the HPatches dataset and place it so the path matches `hpatches-sequenc
 ## Repository Structure
 
 ```
-main/
+ECE1508DL/
 ├── models/              # Student architectures and shared modules
-│   ├── backbone.py      # MobileNetV3-Small backbone
+│   ├── backbone.py          # MobileNetV3-Small backbone
 │   ├── studentattention.py  # Student-Hybrid
-│   ├── student_cnn.py   # Student-CNN
+│   ├── student_cnn.py       # Student-CNN
 │   ├── dilated_interaction.py
-│   ├── matching.py      # Coarse matching + fine refinement
-│   └── config.py        # Hyperparameter configs
+│   ├── matching.py          # Coarse matching + fine refinement
+│   └── config.py            # Hyperparameter configs
 ├── losses/              # Multi-level distillation losses
 ├── utils/               # Geometry utilities (GT from homography)
 ├── dataset.py           # Synthetic homography pair generator
 ├── notebooks/
 │   ├── training.ipynb           # KD training pipeline
 │   ├── evaluation.ipynb         # HPatches evaluation
-│   └── teacher_baseline.ipynb   # LoFTR baseline reproduction
-├── ablation/            # Threshold, temperature, speed sweeps
+│   ├── teacher_baseline.ipynb   # LoFTR baseline reproduction
+│   ├── student_cnn.ipynb        # Student-CNN architecture walkthrough
+│   ├── student_attention.ipynb  # Student-Hybrid architecture walkthrough
+│   └── testloaddata.ipynb       # Data loading sanity check
+├── ablation/            # Threshold, temperature, speed, loss-weight sweeps
 ├── checkpoints/         # Saved model weights
 ├── visualization/       # Qualitative matching visualization
 └── diagrams/            # Architecture and pipeline figures
@@ -57,9 +60,18 @@ Open `notebooks/evaluation.ipynb`. It loads trained checkpoints, runs inference 
 python -m ablation.threshold_sweep
 python -m ablation.temperature_sweep
 python -m ablation.speed_benchmark
+python -m ablation.loss_weight_ablation
 ```
 
 Results are saved to `ablation/results/`.
+
+## Visualization
+
+```bash
+python visualization/visualize_matching.py --scene i_veggies --threshold 0.001
+```
+
+Generates side-by-side matching plots for a given HPatches scene, comparing teacher and student outputs.
 
 ## Authors
 

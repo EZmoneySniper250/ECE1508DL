@@ -149,7 +149,7 @@ def draw_matches(img0_bgr, img1_bgr, kp0, kp1, conf, max_matches=200, title=""):
             cv2.circle(canvas, (x1, y1), 3, color, -1)
             cv2.line(canvas, (x0, y0), (x1, y1), color, 1, cv2.LINE_AA)
 
-        cv2.putText(canvas, f"{n} matches (threshold={conf_s.min():.3f}–{conf_s.max():.3f})",
+        cv2.putText(canvas, f"{n} matches",
                     (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
 
     # Title bar
@@ -296,7 +296,7 @@ def main():
         print(f"  Matches found: {len(kp0)}")
 
         title = (f"{label} | scene={scene} | pair={idx0}-{idx1} "
-                 f"| threshold={args.threshold} | matches={len(kp0)}")
+                 f"| matches={len(kp0)}")
         panel = draw_matches(img0_disp, img1_disp, kp0, kp1, conf,
                              max_matches=args.max_matches, title=title)
         panels.append(panel)
@@ -309,6 +309,14 @@ def main():
             panels[i] = np.concatenate([p, pad], axis=1)
 
     grid = make_grid(panels, ncols=2)
+
+    # ── main title bar (threshold shown here) ─────────────────────────────────
+    main_title = (f"Student Models  |  threshold={args.threshold}  |  "
+                  f"scene={scene}  |  pair={idx0}-{idx1}")
+    title_bar = np.full((48, grid.shape[1], 3), 20, dtype=np.uint8)
+    cv2.putText(title_bar, main_title, (10, 34),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.85, (220, 220, 255), 2)
+    grid = np.concatenate([title_bar, grid], axis=0)
 
     # ── output ────────────────────────────────────────────────────────────────
     os.makedirs(args.out_dir, exist_ok=True)
